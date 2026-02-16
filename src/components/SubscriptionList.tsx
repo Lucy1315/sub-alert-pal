@@ -1,10 +1,16 @@
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Calendar, CreditCard, Trash2, X, Bell } from "lucide-react";
+import { Plus, Calendar as CalendarIcon, CreditCard, Trash2, X, Bell } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { ReminderRulesEditor } from "./ReminderRulesEditor";
+import { format } from "date-fns";
+import { ko } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const formatCurrency = (amount: number, currency: string) => {
   return new Intl.NumberFormat(currency === "KRW" ? "ko-KR" : "en-US", {
@@ -31,7 +37,7 @@ export const SubscriptionList = () => {
     plan_name: "",
     price: 0,
     currency: "KRW",
-    renewal_date: "",
+    renewal_date: null as Date | null,
     billing_cycle: "monthly",
   });
 
@@ -58,7 +64,7 @@ export const SubscriptionList = () => {
           plan_name: form.plan_name || null,
           price: form.price,
           currency: form.currency,
-          renewal_date: form.renewal_date,
+          renewal_date: format(form.renewal_date!, "yyyy-MM-dd"),
           billing_cycle: form.billing_cycle,
         })
         .select()
@@ -77,7 +83,7 @@ export const SubscriptionList = () => {
       queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["subscriptions-count"] });
       setShowForm(false);
-      setForm({ service_name: "", plan_name: "", price: 0, currency: "KRW", renewal_date: "", billing_cycle: "monthly" });
+      setForm({ service_name: "", plan_name: "", price: 0, currency: "KRW", renewal_date: null, billing_cycle: "monthly" });
       toast.success("구독이 추가되었습니다");
     },
     onError: () => toast.error("구독 추가 실패"),
@@ -158,12 +164,29 @@ export const SubscriptionList = () => {
                 <option key={c.value} value={c.value}>{c.label}</option>
               ))}
             </select>
-            <input
-              type="date"
-              value={form.renewal_date}
-              onChange={(e) => setForm({ ...form, renewal_date: e.target.value })}
-              className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground"
-            />
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "justify-start text-left font-normal bg-secondary border-border",
+                    !form.renewal_date && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {form.renewal_date ? format(form.renewal_date, "PPP", { locale: ko }) : "갱신일 선택"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={form.renewal_date ?? undefined}
+                  onSelect={(date) => setForm({ ...form, renewal_date: date ?? null })}
+                  initialFocus
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
           </div>
           <button
             onClick={() => addMutation.mutate()}
