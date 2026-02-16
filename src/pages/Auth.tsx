@@ -12,16 +12,26 @@ const Auth = () => {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotSubmitting, setForgotSubmitting] = useState(false);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (user) return <Navigate to="/" replace />;
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotSubmitting(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      toast.success("비밀번호 재설정 이메일을 발송했습니다");
+      setShowForgot(false);
+    } catch (error: any) {
+      toast.error(error.message || "오류가 발생했습니다");
+    } finally {
+      setForgotSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,6 +138,48 @@ const Auth = () => {
               ) : isLogin ? "로그인" : "회원가입"}
             </button>
           </form>
+
+          {isLogin && !showForgot && (
+            <button
+              onClick={() => setShowForgot(true)}
+              className="mt-4 w-full text-center text-sm text-muted-foreground hover:text-primary transition-colors"
+            >
+              비밀번호를 잊으셨나요?
+            </button>
+          )}
+
+          {showForgot && (
+            <form onSubmit={handleForgotPassword} className="mt-4 space-y-3 border-t border-border pt-4">
+              <p className="text-sm text-muted-foreground">비밀번호 재설정 이메일을 보내드립니다</p>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="email"
+                  placeholder="이메일"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  required
+                  className="w-full rounded-lg border border-border bg-secondary py-2.5 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(false)}
+                  className="flex-1 rounded-lg border border-border py-2 text-sm text-muted-foreground hover:bg-secondary transition-colors"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={forgotSubmitting}
+                  className="flex-1 rounded-lg bg-primary py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {forgotSubmitting ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : "전송"}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     </div>
