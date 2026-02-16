@@ -16,10 +16,17 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-    const TEST_MODE = Deno.env.get("TEST_MODE") === "true";
     const TEST_PHONE_NUMBER = Deno.env.get("TEST_PHONE_NUMBER") || "";
     const NOTIFICATIONAPI_CLIENT_ID = Deno.env.get("NOTIFICATIONAPI_CLIENT_ID");
     const NOTIFICATIONAPI_CLIENT_SECRET = Deno.env.get("NOTIFICATIONAPI_CLIENT_SECRET");
+
+    // Parse request body for overrides
+    let body: Record<string, unknown> = {};
+    try { body = await req.json(); } catch { /* empty body ok */ }
+
+    const forceTestMode = body.force_test_mode === true;
+    const TEST_MODE = forceTestMode || Deno.env.get("TEST_MODE") === "true";
+    const testEmailRecipient = (body.test_email_recipient as string) || "onboarding@resend.dev";
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -65,7 +72,7 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               from: "SubReminder <onboarding@resend.dev>",
-              to: ["onboarding@resend.dev"],
+              to: [testEmailRecipient],
               subject: "[TEST] Daily Renewal Notification Check",
               html: emailBody,
             }),
@@ -79,7 +86,7 @@ serve(async (req) => {
             subscription_name: "[TEST] Daily Check",
             channel: "email",
             status: emailStatus,
-            recipient: "onboarding@resend.dev",
+            recipient: testEmailRecipient,
             error_message: emailRes.ok ? null : JSON.stringify(emailData),
             test_run: true,
           });
@@ -92,7 +99,7 @@ serve(async (req) => {
             subscription_name: "[TEST] Daily Check",
             channel: "email",
             status: "failed",
-            recipient: "onboarding@resend.dev",
+            recipient: testEmailRecipient,
             error_message: String(e),
             test_run: true,
           });
