@@ -16,52 +16,93 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-    const TEST_PHONE_NUMBER = Deno.env.get("TEST_PHONE_NUMBER") || "";
     const NOTIFICATIONAPI_CLIENT_ID = Deno.env.get("NOTIFICATIONAPI_CLIENT_ID");
     const NOTIFICATIONAPI_CLIENT_SECRET = Deno.env.get("NOTIFICATIONAPI_CLIENT_SECRET");
-
-    // Parse request body for overrides
-    let body: Record<string, unknown> = {};
-    try { body = await req.json(); } catch { /* empty body ok */ }
-
-    const forceTestMode = body.force_test_mode === true;
-    const TEST_MODE = forceTestMode || Deno.env.get("TEST_MODE") === "true";
-    const testEmailRecipient = (body.test_email_recipient as string) || "onboarding@resend.dev";
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Get current date in Asia/Seoul timezone
     const now = new Date();
-    const seoulDate = new Date(
-      now.toLocaleString("en-US", { timeZone: "Asia/Seoul" })
-    );
+    const seoulDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
     const todayStr = seoulDate.toISOString().split("T")[0];
 
-    const results: { email: string | null; sms: string | null } = {
-      email: null,
-      sms: null,
-    };
+    console.log(`[LIVE MODE] Checking renewals for ${todayStr}`);
 
-    if (TEST_MODE) {
-      // ======== TEST MODE ========
-      console.log(`[TEST MODE] Running test notifications for ${todayStr}`);
+    // Get all enabled reminder rules with their subscriptions and user profiles
+    const { data: rules, error: rulesError } = await supabase
+      .from("reminder_rules")
+      .select(`
+        id,
+        offset_days,
+        channel,
+        subscription_id,
+        subscriptions!inner (
+          id,
+          user_id,
+          service_name,
+          plan_name,
+          renewal_date,
+          price,
+          currency,
+          status
+        )
+      `)
+      .eq("enabled", true)
+      .eq("subscriptions.status", "active");
 
-      // Test Email via Resend
-      if (RESEND_API_KEY) {
+    if (rulesError) throw rulesError;
+
+    let sentCount = 0;
+    let skipCount = 0;
+    let errorCount = 0;
+
+    for (const rule of rules || []) {
+      const sub = (rule as any).subscriptions;
+      if (!sub) continue;
+
+      // Calculate target date: renewal_date - offset_days
+      const renewalDate = new Date(sub.renewal_date);
+      const targetDate = new Date(renewalDate);
+      targetDate.setDate(targetDate.getDate() - rule.offset_days);
+      const targetStr = targetDate.toISOString().split("T")[0];
+
+      if (targetStr !== todayStr) continue;
+
+      // Get user profile for email and phone
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("phone_number, display_name")
+        .eq("user_id", sub.user_id)
+        .maybeSingle();
+
+      // Get user email from auth
+      const { data: { user: authUser } } = await supabase.auth.admin.getUserById(sub.user_id);
+      const userEmail = authUser?.email;
+
+      if (rule.channel === "email" && RESEND_API_KEY && userEmail) {
         try {
+          // Check dedup: unique on (subscription_id, channel, sent_date, offset_days)
+          const { data: existing } = await supabase
+            .from("notification_logs")
+            .select("id")
+            .eq("subscription_id", sub.id)
+            .eq("channel", "email")
+            .eq("sent_date", todayStr)
+            .eq("offset_days", rule.offset_days)
+            .maybeSingle();
+
+          if (existing) {
+            skipCount++;
+            console.log(`[SKIP] Dedup: ${sub.service_name} email offset=${rule.offset_days}`);
+            continue;
+          }
+
+          const offsetLabel = rule.offset_days === 0 ? "오늘" : `${rule.offset_days}일 전`;
           const emailBody = `
-            <h2>[TEST] Daily Renewal Notification Check</h2>
-            <p><strong>Date (KST):</strong> ${todayStr}</p>
-            <p><strong>System Status:</strong> ✅ Operational</p>
-            <p><strong>Mode:</strong> TEST MODE</p>
-            <h3>Connected Channels:</h3>
-            <ul>
-              <li>📧 Email (Resend): ${RESEND_API_KEY ? "Connected" : "Not configured"}</li>
-              <li>💬 SMS (NotificationAPI): ${NOTIFICATIONAPI_CLIENT_ID ? "Connected" : "Not configured"}</li>
-            </ul>
-            <p><strong>Test Phone Number:</strong> ${TEST_PHONE_NUMBER || "Not set"}</p>
-            <hr>
-            <p><em>This is an automated test notification from SubReminder.</em></p>
+            <h2>구독 결제일 알림</h2>
+            <p><strong>${sub.service_name}</strong>${sub.plan_name ? ` (${sub.plan_name})` : ""} 구독이 <strong>${sub.renewal_date}</strong>에 갱신됩니다.</p>
+            <p>금액: ${sub.price} ${sub.currency}</p>
+            <p>${offsetLabel} 알림입니다.</p>
           `;
 
           const emailRes = await fetch("https://api.resend.com/emails", {
@@ -72,43 +113,66 @@ serve(async (req) => {
             },
             body: JSON.stringify({
               from: "SubReminder <onboarding@resend.dev>",
-              to: [testEmailRecipient],
-              subject: "[TEST] Daily Renewal Notification Check",
+              to: [userEmail],
+              subject: `[SubReminder] ${sub.service_name} 결제일 ${offsetLabel}`,
               html: emailBody,
             }),
           });
 
           const emailData = await emailRes.json();
-          const emailStatus = emailRes.ok ? "success" : "failed";
-          results.email = emailStatus;
+          const status = emailRes.ok ? "success" : "failed";
 
           await supabase.from("notification_logs").insert({
-            subscription_name: "[TEST] Daily Check",
+            user_id: sub.user_id,
+            subscription_id: sub.id,
+            subscription_name: sub.service_name,
             channel: "email",
-            status: emailStatus,
-            recipient: testEmailRecipient,
+            status,
+            recipient: userEmail,
             error_message: emailRes.ok ? null : JSON.stringify(emailData),
-            test_run: true,
+            sent_date: todayStr,
+            offset_days: rule.offset_days,
+            test_run: false,
           });
 
-          console.log(`[TEST] Email ${emailStatus}:`, emailData);
+          if (emailRes.ok) sentCount++;
+          else errorCount++;
+          console.log(`[EMAIL] ${status}: ${sub.service_name} -> ${userEmail}`);
         } catch (e) {
-          console.error("[TEST] Email error:", e);
-          results.email = "failed";
+          errorCount++;
+          console.error(`[EMAIL ERROR] ${sub.service_name}:`, e);
           await supabase.from("notification_logs").insert({
-            subscription_name: "[TEST] Daily Check",
+            user_id: sub.user_id,
+            subscription_id: sub.id,
+            subscription_name: sub.service_name,
             channel: "email",
             status: "failed",
-            recipient: testEmailRecipient,
+            recipient: userEmail,
             error_message: String(e),
-            test_run: true,
+            sent_date: todayStr,
+            offset_days: rule.offset_days,
+            test_run: false,
           });
         }
       }
 
-      // Test SMS via NotificationAPI
-      if (NOTIFICATIONAPI_CLIENT_ID && NOTIFICATIONAPI_CLIENT_SECRET && TEST_PHONE_NUMBER) {
+      if (rule.channel === "sms" && NOTIFICATIONAPI_CLIENT_ID && NOTIFICATIONAPI_CLIENT_SECRET && profile?.phone_number) {
         try {
+          const { data: existing } = await supabase
+            .from("notification_logs")
+            .select("id")
+            .eq("subscription_id", sub.id)
+            .eq("channel", "sms")
+            .eq("sent_date", todayStr)
+            .eq("offset_days", rule.offset_days)
+            .maybeSingle();
+
+          if (existing) {
+            skipCount++;
+            console.log(`[SKIP] Dedup: ${sub.service_name} sms offset=${rule.offset_days}`);
+            continue;
+          }
+
           const smsRes = await fetch(
             `https://api.notificationapi.com/${NOTIFICATIONAPI_CLIENT_ID}/sender`,
             {
@@ -118,159 +182,52 @@ serve(async (req) => {
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                type: "test_renewal_reminder",
+                type: "renewal_reminder",
                 to: {
-                  id: "test-user",
-                  number: TEST_PHONE_NUMBER,
+                  id: sub.user_id,
+                  number: profile.phone_number,
                 },
                 sms: {
-                  message: `[TEST] SubReminder system check - ${todayStr} KST. System operational.`,
+                  message: `[SubReminder] ${sub.service_name} 구독이 ${sub.renewal_date}에 갱신됩니다. 금액: ${sub.price} ${sub.currency}`,
                 },
               }),
             }
           );
 
           const smsData = await smsRes.text();
-          const smsStatus = smsRes.ok ? "success" : "failed";
-          results.sms = smsStatus;
+          const status = smsRes.ok ? "success" : "failed";
 
           await supabase.from("notification_logs").insert({
-            subscription_name: "[TEST] Daily Check",
+            user_id: sub.user_id,
+            subscription_id: sub.id,
+            subscription_name: sub.service_name,
             channel: "sms",
-            status: smsStatus,
-            recipient: TEST_PHONE_NUMBER,
+            status,
+            recipient: profile.phone_number,
             error_message: smsRes.ok ? null : smsData,
-            test_run: true,
+            sent_date: todayStr,
+            offset_days: rule.offset_days,
+            test_run: false,
           });
 
-          console.log(`[TEST] SMS ${smsStatus}:`, smsData);
+          if (smsRes.ok) sentCount++;
+          else errorCount++;
+          console.log(`[SMS] ${status}: ${sub.service_name} -> ${profile.phone_number}`);
         } catch (e) {
-          console.error("[TEST] SMS error:", e);
-          results.sms = "failed";
+          errorCount++;
+          console.error(`[SMS ERROR] ${sub.service_name}:`, e);
           await supabase.from("notification_logs").insert({
-            subscription_name: "[TEST] Daily Check",
+            user_id: sub.user_id,
+            subscription_id: sub.id,
+            subscription_name: sub.service_name,
             channel: "sms",
             status: "failed",
-            recipient: TEST_PHONE_NUMBER,
+            recipient: profile.phone_number,
             error_message: String(e),
-            test_run: true,
+            sent_date: todayStr,
+            offset_days: rule.offset_days,
+            test_run: false,
           });
-        }
-      }
-    } else {
-      // ======== LIVE MODE ========
-      console.log(`[LIVE MODE] Checking renewals for ${todayStr}`);
-
-      // Get all subscriptions
-      const { data: subscriptions, error: subError } = await supabase
-        .from("subscriptions")
-        .select("*");
-
-      if (subError) throw subError;
-
-      for (const sub of subscriptions || []) {
-        // Calculate target date
-        const renewalDate = new Date(sub.renewal_date);
-        const targetDate = new Date(renewalDate);
-        targetDate.setDate(targetDate.getDate() - sub.notify_days_before);
-        const targetStr = targetDate.toISOString().split("T")[0];
-
-        if (targetStr !== todayStr) continue;
-
-        const recipient = sub.email_recipient || "onboarding@resend.dev";
-
-        // Send email
-        if (sub.notify_email && RESEND_API_KEY) {
-          try {
-            const emailBody = `
-              <h2>구독 결제일 알림</h2>
-              <p><strong>${sub.name}</strong> 구독이 <strong>${sub.renewal_date}</strong>에 갱신됩니다.</p>
-              <p>금액: ${sub.amount} ${sub.currency}</p>
-              <p>${sub.notify_days_before}일 전 알림입니다.</p>
-            `;
-
-            const emailRes = await fetch("https://api.resend.com/emails", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${RESEND_API_KEY}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                from: "SubReminder <onboarding@resend.dev>",
-                to: [recipient],
-                subject: `[SubReminder] ${sub.name} 결제일 ${sub.notify_days_before}일 전`,
-                html: emailBody,
-              }),
-            });
-
-            const emailData = await emailRes.json();
-            await supabase.from("notification_logs").insert({
-              subscription_id: sub.id,
-              subscription_name: sub.name,
-              channel: "email",
-              status: emailRes.ok ? "success" : "failed",
-              recipient,
-              error_message: emailRes.ok ? null : JSON.stringify(emailData),
-              test_run: false,
-            });
-          } catch (e) {
-            await supabase.from("notification_logs").insert({
-              subscription_id: sub.id,
-              subscription_name: sub.name,
-              channel: "email",
-              status: "failed",
-              recipient,
-              error_message: String(e),
-              test_run: false,
-            });
-          }
-        }
-
-        // Send SMS
-        if (sub.notify_sms && sub.phone_number && NOTIFICATIONAPI_CLIENT_ID && NOTIFICATIONAPI_CLIENT_SECRET) {
-          try {
-            const smsRes = await fetch(
-              `https://api.notificationapi.com/${NOTIFICATIONAPI_CLIENT_ID}/sender`,
-              {
-                method: "POST",
-                headers: {
-                  Authorization: `Basic ${btoa(NOTIFICATIONAPI_CLIENT_ID + ":" + NOTIFICATIONAPI_CLIENT_SECRET)}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  type: "renewal_reminder",
-                  to: {
-                    id: sub.id,
-                    number: sub.phone_number,
-                  },
-                  sms: {
-                    message: `${sub.name} 구독이 ${sub.renewal_date}에 갱신됩니다. 금액: ${sub.amount} ${sub.currency}`,
-                  },
-                }),
-              }
-            );
-
-            const smsData = await smsRes.text();
-            await supabase.from("notification_logs").insert({
-              subscription_id: sub.id,
-              subscription_name: sub.name,
-              channel: "sms",
-              status: smsRes.ok ? "success" : "failed",
-              recipient: sub.phone_number,
-              error_message: smsRes.ok ? null : smsData,
-              test_run: false,
-            });
-          } catch (e) {
-            await supabase.from("notification_logs").insert({
-              subscription_id: sub.id,
-              subscription_name: sub.name,
-              channel: "sms",
-              status: "failed",
-              recipient: sub.phone_number,
-              error_message: String(e),
-              test_run: false,
-            });
-          }
         }
       }
     }
@@ -278,9 +235,10 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        mode: TEST_MODE ? "test" : "live",
         date: todayStr,
-        results,
+        sent: sentCount,
+        skipped: skipCount,
+        errors: errorCount,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
