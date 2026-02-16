@@ -32,7 +32,6 @@ export const NotificationLogTable = () => {
               <th className="px-5 py-3 font-medium">상태</th>
               <th className="px-5 py-3 font-medium">수신자</th>
               <th className="px-5 py-3 font-medium">발송 시간</th>
-              <th className="px-5 py-3 font-medium">유형</th>
             </tr>
           </thead>
           <tbody>
@@ -58,13 +57,6 @@ export const NotificationLogTable = () => {
                     <Clock className="h-3.5 w-3.5" />
                     {new Date(log.sent_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}
                   </span>
-                </td>
-                <td className="px-5 py-3">
-                  {log.test_run ? (
-                    <span className="badge-test text-[10px]">TEST</span>
-                  ) : (
-                    <span className="badge-live text-[10px]">LIVE</span>
-                  )}
                 </td>
               </tr>
             ))}

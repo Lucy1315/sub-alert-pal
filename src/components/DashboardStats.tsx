@@ -26,7 +26,7 @@ export const DashboardStats = () => {
   const { data: subCount } = useQuery({
     queryKey: ["subscriptions-count"],
     queryFn: async () => {
-      const { count } = await supabase.from("subscriptions").select("*", { count: "exact", head: true });
+      const { count } = await supabase.from("subscriptions").select("*", { count: "exact", head: true }).eq("status", "active");
       return count ?? 0;
     },
   });
@@ -40,6 +40,7 @@ export const DashboardStats = () => {
       const { count } = await supabase
         .from("subscriptions")
         .select("*", { count: "exact", head: true })
+        .eq("status", "active")
         .lte("renewal_date", nextWeek.toISOString().split("T")[0])
         .gte("renewal_date", today.toISOString().split("T")[0]);
       return count ?? 0;
@@ -52,7 +53,8 @@ export const DashboardStats = () => {
       const { count } = await supabase
         .from("notification_logs")
         .select("*", { count: "exact", head: true })
-        .eq("channel", "email");
+        .eq("channel", "email")
+        .eq("test_run", false);
       return count ?? 0;
     },
   });
@@ -63,7 +65,8 @@ export const DashboardStats = () => {
       const { count } = await supabase
         .from("notification_logs")
         .select("*", { count: "exact", head: true })
-        .eq("channel", "sms");
+        .eq("channel", "sms")
+        .eq("test_run", false);
       return count ?? 0;
     },
   });

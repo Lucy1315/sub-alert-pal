@@ -19,34 +19,43 @@ export type Database = {
           channel: string
           error_message: string | null
           id: string
+          offset_days: number | null
           recipient: string | null
           sent_at: string
+          sent_date: string
           status: string
           subscription_id: string | null
           subscription_name: string
           test_run: boolean
+          user_id: string | null
         }
         Insert: {
           channel: string
           error_message?: string | null
           id?: string
+          offset_days?: number | null
           recipient?: string | null
           sent_at?: string
+          sent_date?: string
           status: string
           subscription_id?: string | null
           subscription_name: string
           test_run?: boolean
+          user_id?: string | null
         }
         Update: {
           channel?: string
           error_message?: string | null
           id?: string
+          offset_days?: number | null
           recipient?: string | null
           sent_at?: string
+          sent_date?: string
           status?: string
           subscription_id?: string | null
           subscription_name?: string
           test_run?: boolean
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -58,48 +67,107 @@ export type Database = {
           },
         ]
       }
-      subscriptions: {
+      profiles: {
         Row: {
-          amount: number
           created_at: string
-          currency: string
-          email_recipient: string | null
+          display_name: string | null
           id: string
-          name: string
-          notify_days_before: number
-          notify_email: boolean
-          notify_sms: boolean
           phone_number: string | null
-          renewal_date: string
           updated_at: string
+          user_id: string
         }
         Insert: {
-          amount?: number
           created_at?: string
-          currency?: string
-          email_recipient?: string | null
+          display_name?: string | null
           id?: string
-          name: string
-          notify_days_before?: number
-          notify_email?: boolean
-          notify_sms?: boolean
           phone_number?: string | null
-          renewal_date: string
           updated_at?: string
+          user_id: string
         }
         Update: {
-          amount?: number
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          phone_number?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      reminder_rules: {
+        Row: {
+          channel: string
+          created_at: string
+          enabled: boolean
+          id: string
+          offset_days: number
+          subscription_id: string
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          offset_days: number
+          subscription_id: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          offset_days?: number
+          subscription_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reminder_rules_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          billing_cycle: string
+          created_at: string
+          currency: string
+          id: string
+          plan_name: string | null
+          price: number
+          renewal_date: string
+          service_name: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          billing_cycle?: string
           created_at?: string
           currency?: string
-          email_recipient?: string | null
           id?: string
-          name?: string
-          notify_days_before?: number
-          notify_email?: boolean
-          notify_sms?: boolean
-          phone_number?: string | null
-          renewal_date?: string
+          plan_name?: string | null
+          price?: number
+          renewal_date: string
+          service_name: string
+          status?: string
           updated_at?: string
+          user_id: string
+        }
+        Update: {
+          billing_cycle?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          plan_name?: string | null
+          price?: number
+          renewal_date?: string
+          service_name?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

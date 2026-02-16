@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, CreditCard, ScrollText, Settings } from "lucide-react";
-import { ModeBadge } from "./ModeBadge";
+import { LayoutDashboard, CreditCard, ScrollText, Settings, LogOut } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 const navItems = [
   { to: "/", label: "대시보드", icon: LayoutDashboard },
@@ -11,6 +11,7 @@ const navItems = [
 
 export const AppLayout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
+  const { user, signOut } = useAuth();
 
   return (
     <div className="flex min-h-screen">
@@ -22,12 +23,8 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
           </div>
           <div>
             <h1 className="text-sm font-bold text-foreground">SubReminder</h1>
-            <p className="text-[11px] text-muted-foreground">구독 결제 알림</p>
+            <p className="text-[11px] text-muted-foreground truncate max-w-[140px]">{user?.email}</p>
           </div>
-        </div>
-
-        <div className="mb-6 px-2">
-          <ModeBadge isTestMode={true} />
         </div>
 
         <nav className="space-y-1">
@@ -49,6 +46,16 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
             );
           })}
         </nav>
+
+        <div className="mt-auto pt-4 border-t border-border mt-8">
+          <button
+            onClick={signOut}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          >
+            <LogOut className="h-4 w-4" />
+            로그아웃
+          </button>
+        </div>
       </aside>
 
       {/* Mobile header */}
@@ -60,7 +67,9 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
             </div>
             <span className="font-bold text-sm">SubReminder</span>
           </div>
-          <ModeBadge isTestMode={true} />
+          <button onClick={signOut} className="text-muted-foreground hover:text-destructive">
+            <LogOut className="h-4 w-4" />
+          </button>
         </header>
 
         {/* Mobile nav */}

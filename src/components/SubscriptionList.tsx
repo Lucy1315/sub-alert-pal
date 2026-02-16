@@ -1,8 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Calendar, CreditCard, Trash2, X } from "lucide-react";
+import { Plus, Calendar, CreditCard, Trash2, X, Bell } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { ReminderRulesEditor } from "./ReminderRulesEditor";
 
 const formatCurrency = (amount: number, currency: string) => {
   return new Intl.NumberFormat(currency === "KRW" ? "ko-KR" : "en-US", {
@@ -12,23 +14,34 @@ const formatCurrency = (amount: number, currency: string) => {
   }).format(amount);
 };
 
+const BILLING_CYCLES = [
+  { value: "monthly", label: "월간" },
+  { value: "yearly", label: "연간" },
+  { value: "weekly", label: "주간" },
+  { value: "quarterly", label: "분기" },
+];
+
 export const SubscriptionList = () => {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [editingRulesId, setEditingRulesId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    name: "",
-    amount: 0,
+    service_name: "",
+    plan_name: "",
+    price: 0,
     currency: "KRW",
     renewal_date: "",
-    notify_days_before: 3,
-    notify_email: true,
-    notify_sms: false,
+    billing_cycle: "monthly",
   });
 
   const { data: subscriptions, isLoading } = useQuery({
     queryKey: ["subscriptions"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("subscriptions").select("*").order("renewal_date");
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .select("*")
+        .order("renewal_date");
       if (error) throw error;
       return data;
     },
@@ -36,22 +49,35 @@ export const SubscriptionList = () => {
 
   const addMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("subscriptions").insert({
-        name: form.name,
-        amount: form.amount,
-        currency: form.currency,
-        renewal_date: form.renewal_date,
-        notify_days_before: form.notify_days_before,
-        notify_email: form.notify_email,
-        notify_sms: form.notify_sms,
-      });
+      // Insert subscription
+      const { data: sub, error } = await supabase
+        .from("subscriptions")
+        .insert({
+          user_id: user!.id,
+          service_name: form.service_name,
+          plan_name: form.plan_name || null,
+          price: form.price,
+          currency: form.currency,
+          renewal_date: form.renewal_date,
+          billing_cycle: form.billing_cycle,
+        })
+        .select()
+        .single();
       if (error) throw error;
+
+      // Create default reminder rules (7일 전, 1일 전, 당일 - 이메일 기본)
+      const defaultRules = [
+        { subscription_id: sub.id, offset_days: 7, channel: "email" as const, enabled: true },
+        { subscription_id: sub.id, offset_days: 1, channel: "email" as const, enabled: true },
+        { subscription_id: sub.id, offset_days: 0, channel: "email" as const, enabled: true },
+      ];
+      await supabase.from("reminder_rules").insert(defaultRules);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["subscriptions-count"] });
       setShowForm(false);
-      setForm({ name: "", amount: 0, currency: "KRW", renewal_date: "", notify_days_before: 3, notify_email: true, notify_sms: false });
+      setForm({ service_name: "", plan_name: "", price: 0, currency: "KRW", renewal_date: "", billing_cycle: "monthly" });
       toast.success("구독이 추가되었습니다");
     },
     onError: () => toast.error("구독 추가 실패"),
@@ -85,7 +111,6 @@ export const SubscriptionList = () => {
         </button>
       </div>
 
-      {/* Add Form */}
       {showForm && (
         <div className="glass-card p-5 space-y-4">
           <div className="flex items-center justify-between">
@@ -96,17 +121,23 @@ export const SubscriptionList = () => {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <input
-              placeholder="서비스 이름"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="서비스 이름 (예: Netflix)"
+              value={form.service_name}
+              onChange={(e) => setForm({ ...form, service_name: e.target.value })}
+              className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+            />
+            <input
+              placeholder="플랜 이름 (예: Premium)"
+              value={form.plan_name}
+              onChange={(e) => setForm({ ...form, plan_name: e.target.value })}
               className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
             />
             <div className="flex gap-2">
               <input
                 type="number"
                 placeholder="금액"
-                value={form.amount || ""}
-                onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
+                value={form.price || ""}
+                onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
                 className="flex-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground"
               />
               <select
@@ -118,70 +149,70 @@ export const SubscriptionList = () => {
                 <option value="USD">USD</option>
               </select>
             </div>
+            <select
+              value={form.billing_cycle}
+              onChange={(e) => setForm({ ...form, billing_cycle: e.target.value })}
+              className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground"
+            >
+              {BILLING_CYCLES.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
             <input
               type="date"
               value={form.renewal_date}
               onChange={(e) => setForm({ ...form, renewal_date: e.target.value })}
               className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground"
             />
-            <input
-              type="number"
-              placeholder="알림 일수"
-              value={form.notify_days_before}
-              onChange={(e) => setForm({ ...form, notify_days_before: Number(e.target.value) })}
-              className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground"
-            />
-          </div>
-          <div className="flex items-center gap-4 text-sm">
-            <label className="flex items-center gap-2 text-foreground">
-              <input type="checkbox" checked={form.notify_email} onChange={(e) => setForm({ ...form, notify_email: e.target.checked })} />
-              이메일 알림
-            </label>
-            <label className="flex items-center gap-2 text-foreground">
-              <input type="checkbox" checked={form.notify_sms} onChange={(e) => setForm({ ...form, notify_sms: e.target.checked })} />
-              SMS 알림
-            </label>
           </div>
           <button
             onClick={() => addMutation.mutate()}
-            disabled={!form.name || !form.renewal_date}
+            disabled={!form.service_name || !form.renewal_date}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
-            추가
+            추가 (기본 이메일 알림 자동 생성)
           </button>
         </div>
       )}
 
-      {/* List */}
       <div className="grid gap-3">
         {isLoading && <div className="text-center text-muted-foreground py-8">로딩 중...</div>}
         {(subscriptions ?? []).map((sub) => (
-          <div key={sub.id} className="glass-card flex items-center justify-between p-4">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-sm">
-                {sub.name.charAt(0)}
-              </div>
-              <div>
-                <p className="font-medium text-foreground">{sub.name}</p>
-                <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1"><CreditCard className="h-3 w-3" />{formatCurrency(sub.amount, sub.currency)}</span>
-                  <span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3" />{sub.renewal_date}</span>
-                  <span>{sub.notify_days_before}일 전 알림</span>
+          <div key={sub.id} className="glass-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-sm">
+                  {sub.service_name.charAt(0)}
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">{sub.service_name}</p>
+                  <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
+                    {sub.plan_name && <span>{sub.plan_name}</span>}
+                    <span className="inline-flex items-center gap-1"><CreditCard className="h-3 w-3" />{formatCurrency(sub.price, sub.currency)}</span>
+                    <span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3" />{sub.renewal_date}</span>
+                    <span className="capitalize">{BILLING_CYCLES.find(c => c.value === sub.billing_cycle)?.label || sub.billing_cycle}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex gap-1.5">
-                {sub.notify_email && <span className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">Email</span>}
-                {sub.notify_sms && <span className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">SMS</span>}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setEditingRulesId(editingRulesId === sub.id ? null : sub.id)}
+                  className={`rounded-lg p-2 transition-colors ${editingRulesId === sub.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
+                  title="알림 규칙 관리"
+                >
+                  <Bell className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => deleteMutation.mutate(sub.id)}
+                  className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
-              <button
-                onClick={() => deleteMutation.mutate(sub.id)}
-                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
             </div>
+            {editingRulesId === sub.id && (
+              <ReminderRulesEditor subscriptionId={sub.id} />
+            )}
           </div>
         ))}
         {!isLoading && (subscriptions ?? []).length === 0 && (
