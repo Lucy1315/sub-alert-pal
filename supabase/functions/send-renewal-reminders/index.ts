@@ -110,7 +110,7 @@ serve(async (req) => {
       if (NOTIFICATIONAPI_CLIENT_ID && NOTIFICATIONAPI_CLIENT_SECRET && TEST_PHONE_NUMBER) {
         try {
           const smsRes = await fetch(
-            `https://app.notificationapi.com/sender/notificationapi/${NOTIFICATIONAPI_CLIENT_ID}/notifications`,
+            `https://api.notificationapi.com/${NOTIFICATIONAPI_CLIENT_ID}/sender`,
             {
               method: "POST",
               headers: {
@@ -118,14 +118,13 @@ serve(async (req) => {
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                notificationId: "test_renewal_reminder",
-                user: {
+                type: "test_renewal_reminder",
+                to: {
                   id: "test-user",
                   number: TEST_PHONE_NUMBER,
                 },
-                mergeTags: {
-                  subject: "[TEST] Daily Renewal Check",
-                  body: `[TEST] SubReminder system check - ${todayStr} KST. System operational.`,
+                sms: {
+                  message: `[TEST] SubReminder system check - ${todayStr} KST. System operational.`,
                 },
               }),
             }
@@ -231,7 +230,7 @@ serve(async (req) => {
         if (sub.notify_sms && sub.phone_number && NOTIFICATIONAPI_CLIENT_ID && NOTIFICATIONAPI_CLIENT_SECRET) {
           try {
             const smsRes = await fetch(
-              `https://app.notificationapi.com/sender/notificationapi/${NOTIFICATIONAPI_CLIENT_ID}/notifications`,
+              `https://api.notificationapi.com/${NOTIFICATIONAPI_CLIENT_ID}/sender`,
               {
                 method: "POST",
                 headers: {
@@ -239,14 +238,13 @@ serve(async (req) => {
                   "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                  notificationId: "renewal_reminder",
-                  user: {
+                  type: "renewal_reminder",
+                  to: {
                     id: sub.id,
                     number: sub.phone_number,
                   },
-                  mergeTags: {
-                    subject: `${sub.name} 결제일 알림`,
-                    body: `${sub.name} 구독이 ${sub.renewal_date}에 갱신됩니다. 금액: ${sub.amount} ${sub.currency}`,
+                  sms: {
+                    message: `${sub.name} 구독이 ${sub.renewal_date}에 갱신됩니다. 금액: ${sub.amount} ${sub.currency}`,
                   },
                 }),
               }
