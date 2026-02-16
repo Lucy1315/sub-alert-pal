@@ -14,7 +14,95 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      notification_logs: {
+        Row: {
+          channel: string
+          error_message: string | null
+          id: string
+          recipient: string | null
+          sent_at: string
+          status: string
+          subscription_id: string | null
+          subscription_name: string
+          test_run: boolean
+        }
+        Insert: {
+          channel: string
+          error_message?: string | null
+          id?: string
+          recipient?: string | null
+          sent_at?: string
+          status: string
+          subscription_id?: string | null
+          subscription_name: string
+          test_run?: boolean
+        }
+        Update: {
+          channel?: string
+          error_message?: string | null
+          id?: string
+          recipient?: string | null
+          sent_at?: string
+          status?: string
+          subscription_id?: string | null
+          subscription_name?: string
+          test_run?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_logs_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          email_recipient: string | null
+          id: string
+          name: string
+          notify_days_before: number
+          notify_email: boolean
+          notify_sms: boolean
+          phone_number: string | null
+          renewal_date: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          email_recipient?: string | null
+          id?: string
+          name: string
+          notify_days_before?: number
+          notify_email?: boolean
+          notify_sms?: boolean
+          phone_number?: string | null
+          renewal_date: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          email_recipient?: string | null
+          id?: string
+          name?: string
+          notify_days_before?: number
+          notify_email?: boolean
+          notify_sms?: boolean
+          phone_number?: string | null
+          renewal_date?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
