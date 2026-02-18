@@ -120,10 +120,10 @@
 
 | 테이블 | 정책 |
 |---|---|
-| `profiles` | 사용자 본인 프로필만 SELECT/INSERT/UPDATE |
+| `profiles` | 사용자 본인 프로필만 SELECT/INSERT/UPDATE/DELETE |
 | `subscriptions` | 사용자 본인 구독만 CRUD, service_role은 전체 SELECT |
 | `reminder_rules` | 소유 구독의 규칙만 CRUD (subscriptions JOIN), service_role 전체 SELECT |
-| `notification_logs` | 사용자 본인 로그만 SELECT, service_role만 INSERT/SELECT |
+| `notification_logs` | 사용자 본인 로그만 SELECT/DELETE, service_role만 INSERT/SELECT |
 
 ---
 
