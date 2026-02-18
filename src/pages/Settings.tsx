@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Save, Phone, User, Lock } from "lucide-react";
+import { Save, Phone, User, Lock, Eye, EyeOff } from "lucide-react";
 
 const Settings = () => {
   const { user } = useAuth();
@@ -13,6 +13,7 @@ const Settings = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPassword, setChangingPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { data: profile } = useQuery({
     queryKey: ["profile"],
@@ -108,23 +109,41 @@ const Settings = () => {
           <div className="space-y-3">
             <div>
               <label className="mb-1 block text-xs text-muted-foreground">새 비밀번호</label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="최소 6자"
-                className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="최소 6자"
+                  className="w-full rounded-lg border border-border bg-secondary px-3 py-2 pr-10 text-sm text-foreground placeholder:text-muted-foreground"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <div>
               <label className="mb-1 block text-xs text-muted-foreground">비밀번호 확인</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="비밀번호를 다시 입력하세요"
-                className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="비밀번호를 다시 입력하세요"
+                  className="w-full rounded-lg border border-border bg-secondary px-3 py-2 pr-10 text-sm text-foreground placeholder:text-muted-foreground"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <button
               disabled={changingPassword}
