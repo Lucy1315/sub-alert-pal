@@ -1,13 +1,12 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Mail, Lock, User, Loader2, Eye, EyeOff } from "lucide-react";
 
 const Auth = () => {
   const { user, loading } = useAuth();
-  const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,7 +43,8 @@ const Auth = () => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("로그인 성공!");
-        navigate("/", { replace: true });
+        // Don't setSubmitting(false) on success - let onAuthStateChange handle redirect
+        return;
       } else {
         const { error } = await supabase.auth.signUp({
           email,
@@ -59,9 +59,8 @@ const Auth = () => {
       }
     } catch (error: any) {
       toast.error(error.message || "오류가 발생했습니다");
-    } finally {
-      setSubmitting(false);
     }
+    setSubmitting(false);
   };
 
   if (loading) {
